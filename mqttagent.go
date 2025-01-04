@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/go-mqtt/mqtt"
+	"github.com/yuin/gluamapper"
 	"github.com/yuin/gopher-lua"
 )
 
@@ -134,22 +135,67 @@ func stateCnxTable(L *lua.LState) *lua.LTable {
 	return stateValue(L, keyCnxTable).(*lua.LTable)
 }
 
-func newMqttClient(L *lua.LState) int {
-	server := L.CheckString(1)
-	user := L.CheckString(2)
-	pass := L.CheckString(3)
-	to := time.Duration(L.OptNumber(4, lua.LNumber(1.0))) * time.Second
-	mt := L.GetTypeMetatable(luaMqttClientTypeName)
-	id := stateCnxTable(L).Len() + 1
+type mqttConfig struct {
+	Connection     string
+	PauseTimeout   string
+	AtLeastOnceMax int
+	ExactlyOnceMax int
+	UserName       string
+	Password       []byte
+	Will           struct {
+		Topic       string
+		Message     []byte
+		Retain      bool
+		AtLeastOnce bool
+		ExactlyOnce bool
+	}
+	KeepAlive    uint16
+	CleanSession bool
+}
 
+func newClient(L *lua.LState, id string) (*mqtt.Client, error) {
+	var config mqttConfig
+	if err := gluamapper.Map(L.CheckTable(1), &config); err != nil {
+		return nil, err
+	}
+
+	pto, err := time.ParseDuration(config.PauseTimeout)
+	if err != nil {
+		pto = time.Second
+	}
+
+	processed_cfg := mqtt.Config{
+		Dialer:         mqtt.NewDialer("tcp", config.Connection),
+		PauseTimeout:   pto,
+		AtLeastOnceMax: config.AtLeastOnceMax,
+		ExactlyOnceMax: config.ExactlyOnceMax,
+		UserName:       config.UserName,
+		Password:       config.Password,
+		Will: struct {
+			Topic       string
+			Message     []byte
+			Retain      bool
+			AtLeastOnce bool
+			ExactlyOnce bool
+		}{
+			Topic:       config.Will.Topic,
+			Message:     config.Will.Message,
+			Retain:      config.Will.Retain,
+			AtLeastOnce: config.Will.AtLeastOnce,
+			ExactlyOnce: config.Will.ExactlyOnce,
+		},
+		KeepAlive:    config.KeepAlive,
+		CleanSession: config.CleanSession,
+	}
+
+	return mqtt.VolatileSession(id, &processed_cfg)
+}
+
+func newMqttClient(L *lua.LState) int {
+	id := stateCnxTable(L).Len() + 1
 	idString := fmt.Sprintf("%s-%d", stateClientPrefix(L), id)
 
-	client, err := mqtt.VolatileSession(idString, &mqtt.Config{
-		Dialer:       mqtt.NewDialer("tcp", server),
-		PauseTimeout: to,
-		UserName:     user,
-		Password:     []byte(pass),
-	})
+	client, err := newClient(L, idString)
 	if err != nil {
 		log.Println(err)
 		L.Push(lua.LNil)
@@ -164,7 +210,7 @@ func newMqttClient(L *lua.LState) int {
 	res := L.NewTable()
 	L.RawSetInt(res, keyClient, ud)
 	L.RawSetInt(res, keySubTable, L.NewTable())
-	L.SetMetatable(res, mt)
+	L.SetMetatable(res, L.GetTypeMetatable(luaMqttClientTypeName))
 	L.RawSetInt(stateCnxTable(L), id, res)
 	L.Push(res)
 	return 1
