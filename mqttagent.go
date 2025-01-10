@@ -79,7 +79,9 @@ func Run(agent MqttAgent, main_script string) {
 
 		if key, _ := subTbl.Next(lua.LNil); key == lua.LNil {
 			client := L.RawGetInt(cnx, keyClient).(*lua.LUserData).Value.(*mqtt.Client)
-			client.Disconnect(nil)
+			if err := client.Disconnect(nil); err != nil {
+				log.Println(err)
+			}
 			L.RawSetInt(stateCnxTable(L), msg.ClientId, lua.LNil)
 		}
 
@@ -98,7 +100,9 @@ func cleanupClients(L *lua.LState) {
 	L.ForEach(cnxTbl, func(key, value lua.LValue) {
 		cnx := value.(*lua.LTable)
 		client := L.RawGetInt(cnx, keyClient).(*lua.LUserData).Value.(*mqtt.Client)
-		client.Disconnect(nil)
+		if err := client.Disconnect(nil); err != nil {
+			log.Println(err)
+		}
 	})
 }
 
@@ -148,7 +152,7 @@ func match(actual, filter string) bool {
 	return matchSliced(strings.Split(actual, "/"), strings.Split(filter, "/"))
 }
 
-func mqttRead(client *mqtt.Client, toLua chan MqttMessage, id int) error {
+func mqttRead(client *mqtt.Client, toLua chan MqttMessage, id int) {
 	var big *mqtt.BigMessage
 
 	for {
@@ -167,7 +171,7 @@ func mqttRead(client *mqtt.Client, toLua chan MqttMessage, id int) error {
 			}
 		default:
 			log.Println(err)
-			return err
+			return
 		}
 	}
 }
