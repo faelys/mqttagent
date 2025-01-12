@@ -471,11 +471,12 @@ func runTimers(L *lua.LState) (bool, time.Time) {
 	k, v := timers.Next(lua.LNil)
 	for k != lua.LNil {
 		tbl := v.(*lua.LTable)
-		t, ok := toTime(L.RawGetInt(tbl, keyTime), now)
+		luaT := L.RawGetInt(tbl, keyTime)
+		t, ok := toTime(luaT, now)
 		if !ok {
 		} else if t.Compare(now) <= 0 {
 			L.RawSetInt(tbl, keyTime, lua.LNil)
-			err := L.CallByParam(lua.P{Fn: L.RawGetInt(tbl, keyCallback), NRet: 0, Protect: true}, v, k)
+			err := L.CallByParam(lua.P{Fn: L.RawGetInt(tbl, keyCallback), NRet: 0, Protect: true}, v, luaT)
 			if err != nil {
 				panic(err)
 			}
