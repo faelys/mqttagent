@@ -58,7 +58,7 @@ func Run(agent MqttAgent, main_script string) {
 
 	registerMqttClientType(L)
 	registerTimerType(L)
-	registerState(L, fmt.Sprintf("mqttagent-%s-%d", hostname, os.Getpid()), &fromMqtt)
+	registerState(L, fmt.Sprintf("mqttagent-%s-%d", hostname, os.Getpid()), fromMqtt)
 	defer cleanupClients(L)
 
 	if err := L.DoFile(main_script); err != nil {
@@ -172,7 +172,7 @@ func processMsg(L *lua.LState, agent MqttAgent, msg *MqttMessage) {
 	}
 }
 
-func mqttRead(client *mqtt.Client, toLua chan MqttMessage, id int) {
+func mqttRead(client *mqtt.Client, toLua chan<- MqttMessage, id int) {
 	var big *mqtt.BigMessage
 
 	for {
@@ -210,7 +210,7 @@ const keyClientPrefix = 2
 const keyCnxTable = 3
 const keyTimerTable = 4
 
-func registerState(L *lua.LState, clientPrefix string, toLua *chan MqttMessage) {
+func registerState(L *lua.LState, clientPrefix string, toLua chan<- MqttMessage) {
 	ud := L.NewUserData()
 	ud.Value = toLua
 
@@ -227,9 +227,9 @@ func stateValue(L *lua.LState, key int) lua.LValue {
 	return L.RawGetInt(st.(*lua.LTable), key)
 }
 
-func stateChanToLua(L *lua.LState) *chan MqttMessage {
+func stateChanToLua(L *lua.LState) chan<- MqttMessage {
 	ud := stateValue(L, keyChanToLua)
-	return ud.(*lua.LUserData).Value.(*chan MqttMessage)
+	return ud.(*lua.LUserData).Value.(chan<- MqttMessage)
 }
 
 func stateClientPrefix(L *lua.LState) string {
@@ -327,7 +327,7 @@ func newMqttClient(L *lua.LState) int {
 		L.Push(lua.LString(err.Error()))
 		return 2
 	}
-	go mqttRead(client, *stateChanToLua(L), id)
+	go mqttRead(client, stateChanToLua(L), id)
 
 	ud := L.NewUserData()
 	ud.Value = client
