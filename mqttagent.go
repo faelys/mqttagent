@@ -182,6 +182,7 @@ func mqttRead(client *mqtt.Client, toLua chan<- MqttMessage, id int) {
 		switch {
 		case err == nil:
 			toLua <- MqttMessage{Timestamp: t, ClientId: id, Topic: dup(topic), Message: dup(message)}
+
 		case errors.As(err, &big):
 			data, err := big.ReadAll()
 			if err != nil {
@@ -189,9 +190,16 @@ func mqttRead(client *mqtt.Client, toLua chan<- MqttMessage, id int) {
 			} else {
 				toLua <- MqttMessage{Timestamp: t, ClientId: id, Topic: dup(topic), Message: data}
 			}
+
+		case errors.Is(err, mqtt.ErrClosed):
+			return
+
+		case mqtt.IsConnectionRefused(err):
+			time.Sleep(15 * time.Minute)
+
 		default:
 			log.Println(err)
-			return
+			time.Sleep(2 * time.Second)
 		}
 	}
 }
