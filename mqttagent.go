@@ -56,9 +56,10 @@ func Run(agent MqttAgent, main_script string) {
 		hostname = "<unknown>"
 	}
 
+	idString := fmt.Sprintf("mqttagent-%s-%d", hostname, os.Getpid())
 	registerMqttClientType(L)
 	registerTimerType(L)
-	registerState(L, fmt.Sprintf("mqttagent-%s-%d", hostname, os.Getpid()), fromMqtt)
+	registerState(L, idString, fromMqtt)
 	defer cleanupClients(L)
 
 	if err := L.DoFile(main_script); err != nil {
@@ -68,11 +69,14 @@ func Run(agent MqttAgent, main_script string) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 
+	log.Println(idString, "started")
+
 	for {
 		select {
 		case msg, ok := <-fromMqtt:
 
 			if !ok {
+				log.Println("fromMqtt is closed")
 				break
 			}
 
@@ -93,6 +97,8 @@ func Run(agent MqttAgent, main_script string) {
 			break
 		}
 	}
+
+	log.Println(idString, "finished")
 }
 
 func cleanupClients(L *lua.LState) {
@@ -105,7 +111,7 @@ func cleanupClients(L *lua.LState) {
 		cnx := value.(*lua.LTable)
 		client := L.RawGetInt(cnx, keyClient).(*lua.LUserData).Value.(*mqtt.Client)
 		if err := client.Disconnect(nil); err != nil {
-			log.Println(err)
+			log.Printf("cleanup client %s: %v", lua.LVAsString(key), err)
 		}
 	})
 }
@@ -166,7 +172,7 @@ func processMsg(L *lua.LState, agent MqttAgent, msg *MqttMessage) {
 	if key, _ := subTbl.Next(lua.LNil); key == lua.LNil {
 		client := L.RawGetInt(cnx, keyClient).(*lua.LUserData).Value.(*mqtt.Client)
 		if err := client.Disconnect(nil); err != nil {
-			log.Println(err)
+			log.Println("disconnect empty client:", err)
 		}
 		L.RawSetInt(stateCnxTable(L), msg.ClientId, lua.LNil)
 	}
@@ -186,19 +192,21 @@ func mqttRead(client *mqtt.Client, toLua chan<- MqttMessage, id int) {
 		case errors.As(err, &big):
 			data, err := big.ReadAll()
 			if err != nil {
-				log.Println(err)
+				log.Println("mqttRead big message:", err)
 			} else {
 				toLua <- MqttMessage{Timestamp: t, ClientId: id, Topic: dup(topic), Message: data}
 			}
 
 		case errors.Is(err, mqtt.ErrClosed):
+			log.Println("mqttRead finishing:", err)
 			return
 
 		case mqtt.IsConnectionRefused(err):
+			log.Println("mqttRead connection refused:", err)
 			time.Sleep(15 * time.Minute)
 
 		default:
-			log.Println(err)
+			log.Println("mqttRead:", err)
 			time.Sleep(2 * time.Second)
 		}
 	}
@@ -330,7 +338,7 @@ func newMqttClient(L *lua.LState) int {
 
 	client, err := newClient(L, idString)
 	if err != nil {
-		log.Println(err)
+		log.Println("newMqttClient:", err)
 		L.Push(lua.LNil)
 		L.Push(lua.LString(err.Error()))
 		return 2
@@ -394,7 +402,7 @@ func luaSubscribe(L *lua.LState) int {
 	}
 
 	if err != nil {
-		log.Println(err)
+		log.Println("luaSubscribe:", err)
 		L.Push(lua.LNil)
 		L.Push(lua.LString(err.Error()))
 		return 2
