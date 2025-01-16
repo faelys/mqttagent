@@ -93,7 +93,7 @@ func Run(agent MqttAgent, main_script string) {
 			timer.Stop()
 		}
 
-		if stateCnxTable(L).Len() == 0 {
+		if tableIsEmpty(stateCnxTable(L)) && tableIsEmpty(stateTimerTable(L)) {
 			break
 		}
 	}
@@ -162,6 +162,11 @@ func match(actual, filter string) bool {
 	return matchSliced(strings.Split(actual, "/"), strings.Split(filter, "/"))
 }
 
+func tableIsEmpty(t *lua.LTable) bool {
+	key, _ := t.Next(lua.LNil)
+	return key == lua.LNil
+}
+
 func processMsg(L *lua.LState, agent MqttAgent, msg *MqttMessage) {
 	agent.Log(L, msg)
 
@@ -169,7 +174,7 @@ func processMsg(L *lua.LState, agent MqttAgent, msg *MqttMessage) {
 	subTbl := L.RawGetInt(cnx, keySubTable).(*lua.LTable)
 	L.ForEach(subTbl, func(key, value lua.LValue) { dispatchMsg(L, msg, cnx, key, value) })
 
-	if key, _ := subTbl.Next(lua.LNil); key == lua.LNil {
+	if tableIsEmpty(subTbl) {
 		client := L.RawGetInt(cnx, keyClient).(*lua.LUserData).Value.(*mqtt.Client)
 		if err := client.Disconnect(nil); err != nil {
 			log.Println("disconnect empty client:", err)
