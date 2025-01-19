@@ -369,13 +369,24 @@ func deleteMqttClient(L *lua.LState) int {
 
 func luaPublish(L *lua.LState) int {
 	cnx := L.CheckTable(1)
-	message := L.CheckString(2)
-	topic := L.CheckString(3)
 	client := L.RawGetInt(cnx, keyClient).(*lua.LUserData).Value.(*mqtt.Client)
 
-	err := client.Publish(nil, []byte(message), topic)
+	if L.GetTop() == 1 {
+		if err := client.Ping(nil); err != nil {
+			log.Println("luaPing:", err)
+			L.Push(lua.LNil)
+			L.Push(lua.LString(err.Error()))
+			return 2
+		} else {
+			L.Push(lua.LTrue)
+			return 1
+		}
+	}
 
-	if err != nil {
+	message := L.CheckString(2)
+	topic := L.CheckString(3)
+
+	if err := client.Publish(nil, []byte(message), topic); err != nil {
 		L.Push(lua.LNil)
 		L.Push(lua.LString(err.Error()))
 		return 2
