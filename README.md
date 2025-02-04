@@ -39,7 +39,7 @@ client = mqttclient.new(config)
 ```
 
 It creates a new MQTT client, using a configuration table which
-is deserializaed into [a `go-mqtt/mqtt.Config`
+is deserialized into [a `go-mqtt/mqtt.Config`
 structure](https://pkg.go.dev/github.com/go-mqtt/mqtt#Config),
 with the extra field `connection` used to make the `Dialer`.
 
@@ -51,7 +51,7 @@ The client has a table-like API to set or reset callbacks:
 -- Set a callback
 client[topic_filer_string] = callback_function
 -- Call or query an existing callback
-client[topic_filter_string](self, mesasge, topic)
+client[topic_filter_string](self, message, topic, t)
 local f = client[topic_filter_string]
 -- Reset a callback
 client[topic_filter_string] = nil
@@ -92,7 +92,7 @@ Timers are created using `timer.new` with a time and a callback:
 timer_obj = timer.new(t, callback)
 ```
 
-Timers **are NOT** autoamtically repeated, the callback is called only
+Timers **are NOT** automatically repeated, the callback is called only
 once, after `t`, and then the timer is destroyed unless explicitly
 rescheduled:
 
@@ -177,7 +177,9 @@ local source = mqttclient.new{
 	user_name = "mqttagent",
 	password = "1234",
 }
+-- Create the destination client
 local dest = mqttclient.new{ "127.0.0.1:1883" }
+-- Make the one-way bridge
 source["#"] = function(self, message, topic)
 	dest(message, topic)
 end
@@ -214,10 +216,10 @@ c["tele/+/SENSOR"] = function(self, message, topic)
 	            name .. ".rrd\" N:" ..
 	            millis(obj.ENERGY.Total) ..
 	            ":" .. (obj.ENERGY.Period or "U") ..
-	             ":" .. (obj.ENERGY.Power or "U") ..
+	            ":" .. (obj.ENERGY.Power or "U") ..
 	            ":" .. millis(obj.ENERGY.Factor) ..
 	            ":" .. (obj.ENERGY.Voltage or "U") ..
-	             ":" .. millis(obj.ENERGY.Current))
+	            ":" .. millis(obj.ENERGY.Current))
 end
 ```
 
@@ -245,7 +247,7 @@ end
 timer.new(next_check(), function(self, t)
 	local msg = ""
 	-- Accumulate missing backup names in msg and reset the table
-	for k, v in paris(backups) do
+	for k, v in pairs(backups) do
 		if v == 0 then
 			msg = msg .. (#msg > 0 and ", " or "") .. k
 		end
@@ -256,7 +258,7 @@ timer.new(next_check(), function(self, t)
 		c("Missing: " .. msg, "alert/backup")
 	end
 	-- Check again tomorrow
-	self>schedule(t + 86400)
+	self:schedule(t + 86400)
 end)
 
 -- Mark backups as seen when notified
