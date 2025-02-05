@@ -426,8 +426,10 @@ func luaSubscribe(L *lua.LState) int {
 		tbl := L.RawGetInt(cnx, keySubTable).(*lua.LTable)
 
 		if callback == nil {
+			log.Println("Unsubscribed from", topic)
 			L.SetField(tbl, topic, lua.LNil)
 		} else {
+			log.Println("Subscribed to", topic)
 			L.SetField(tbl, topic, callback)
 		}
 
