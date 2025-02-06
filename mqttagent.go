@@ -410,10 +410,13 @@ func luaSubscribe(L *lua.LState) int {
 	topic := L.CheckString(2)
 	callback := L.OptFunction(3, nil)
 	client := L.RawGetInt(cnx, keyClient).(*lua.LUserData).Value.(*mqtt.Client)
+	tbl := L.RawGetInt(cnx, keySubTable).(*lua.LTable)
+
+	_, is_new := L.GetField(tbl, topic).(*lua.LNilType)
 
 	if callback == nil {
 		err = client.Unsubscribe(nil, topic)
-	} else {
+	} else if is_new {
 		err = client.Subscribe(nil, topic)
 	}
 
@@ -423,13 +426,19 @@ func luaSubscribe(L *lua.LState) int {
 		L.Push(lua.LString(err.Error()))
 		return 2
 	} else {
-		tbl := L.RawGetInt(cnx, keySubTable).(*lua.LTable)
-
 		if callback == nil {
-			log.Println("Unsubscribed from", topic)
+			if is_new {
+				log.Printf("Not subscribed to %q", topic)
+			} else {
+				log.Printf("Unsubscribed from %q", topic)
+			}
 			L.SetField(tbl, topic, lua.LNil)
 		} else {
-			log.Println("Subscribed to", topic)
+			if is_new {
+				log.Printf("Subscribed to %q", topic)
+			} else {
+				log.Printf("Updating subscription to %q", topic)
+			}
 			L.SetField(tbl, topic, callback)
 		}
 
