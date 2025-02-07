@@ -42,8 +42,8 @@ type MqttMessage struct {
 	Message   []byte
 }
 
-func Run(agent MqttAgent, main_script string) {
-	fromMqtt := make(chan MqttMessage)
+func Run(agent MqttAgent, main_script string, capacity int) {
+	fromMqtt := make(chan MqttMessage, capacity)
 
 	L := lua.NewState()
 	defer L.Close()

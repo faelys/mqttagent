@@ -171,7 +171,7 @@ func main() {
 		main_script = os.Args[1]
 	}
 
-	mqttagent.Run(&agent, main_script)
+	mqttagent.Run(&agent, main_script, 10)
 
 	os.Exit(0)
 }
