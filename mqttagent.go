@@ -270,6 +270,7 @@ func stateTimerTable(L *lua.LState) *lua.LTable {
 const luaMqttClientTypeName = "mqttclient"
 const keyClient = 1
 const keySubTable = 2
+const keyConfig = 3
 
 func registerMqttClientType(L *lua.LState) {
 	mt := L.NewTypeMetatable(luaMqttClientTypeName)
@@ -299,12 +300,7 @@ type mqttConfig struct {
 	CleanSession bool
 }
 
-func newClient(L *lua.LState, id string) (*mqtt.Client, error) {
-	var config mqttConfig
-	if err := gluamapper.Map(L.CheckTable(1), &config); err != nil {
-		return nil, err
-	}
-
+func newClient(config *mqttConfig, id string) (*mqtt.Client, error) {
 	pto, err := time.ParseDuration(config.PauseTimeout)
 	if err != nil {
 		pto = time.Second
@@ -341,7 +337,15 @@ func newMqttClient(L *lua.LState) int {
 	id := stateCnxTable(L).Len() + 1
 	idString := fmt.Sprintf("%s-%d", stateClientPrefix(L), id)
 
-	client, err := newClient(L, idString)
+	var config mqttConfig
+	if err := gluamapper.Map(L.CheckTable(1), &config); err != nil {
+		log.Println("newMqttClient:", err)
+		L.Push(lua.LNil)
+		L.Push(lua.LString(err.Error()))
+		return 2
+	}
+
+	client, err := newClient(&config, idString)
 	if err != nil {
 		log.Println("newMqttClient:", err)
 		L.Push(lua.LNil)
@@ -350,12 +354,16 @@ func newMqttClient(L *lua.LState) int {
 	}
 	go mqttRead(client, stateChanToLua(L), id)
 
-	ud := L.NewUserData()
-	ud.Value = client
+	ud_cli := L.NewUserData()
+	ud_cli.Value = client
+
+	ud_cfg := L.NewUserData()
+	ud_cfg.Value = config
 
 	res := L.NewTable()
-	L.RawSetInt(res, keyClient, ud)
+	L.RawSetInt(res, keyClient, ud_cli)
 	L.RawSetInt(res, keySubTable, L.NewTable())
+	L.RawSetInt(res, keyConfig, ud_cfg)
 	L.SetMetatable(res, L.GetTypeMetatable(luaMqttClientTypeName))
 	L.RawSetInt(stateCnxTable(L), id, res)
 	L.Push(res)
