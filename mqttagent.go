@@ -276,7 +276,6 @@ func registerMqttClientType(L *lua.LState) {
 	mt := L.NewTypeMetatable(luaMqttClientTypeName)
 	L.SetGlobal(luaMqttClientTypeName, mt)
 	L.SetField(mt, "new", L.NewFunction(newMqttClient))
-	L.SetField(mt, "__gc", L.NewFunction(deleteMqttClient))
 	L.SetField(mt, "__call", L.NewFunction(luaPublish))
 	L.SetField(mt, "__index", L.NewFunction(luaQuery))
 	L.SetField(mt, "__newindex", L.NewFunction(luaSubscribe))
@@ -368,11 +367,6 @@ func newMqttClient(L *lua.LState) int {
 	L.RawSetInt(stateCnxTable(L), id, res)
 	L.Push(res)
 	return 1
-}
-
-func deleteMqttClient(L *lua.LState) int {
-	log.Println("deleteMqttClient: TODO")
-	return 0
 }
 
 func luaPublish(L *lua.LState) int {
