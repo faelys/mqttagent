@@ -223,6 +223,12 @@ func dup(src []byte) []byte {
 	return res
 }
 
+func newUserData(L *lua.LState, v interface{}) *lua.LUserData {
+	res := L.NewUserData()
+	res.Value = v
+	return res
+}
+
 /********** State Object in the Lua Interpreter **********/
 
 const luaStateName = "_mqttagent"
@@ -232,11 +238,8 @@ const keyCnxTable = 3
 const keyTimerTable = 4
 
 func registerState(L *lua.LState, clientPrefix string, toLua chan<- MqttMessage) {
-	ud := L.NewUserData()
-	ud.Value = toLua
-
 	st := L.NewTable()
-	L.RawSetInt(st, keyChanToLua, ud)
+	L.RawSetInt(st, keyChanToLua, newUserData(L, toLua))
 	L.RawSetInt(st, keyClientPrefix, lua.LString(clientPrefix))
 	L.RawSetInt(st, keyCnxTable, L.NewTable())
 	L.RawSetInt(st, keyTimerTable, L.NewTable())
@@ -353,16 +356,10 @@ func newMqttClient(L *lua.LState) int {
 	}
 	go mqttRead(client, stateChanToLua(L), id)
 
-	ud_cli := L.NewUserData()
-	ud_cli.Value = client
-
-	ud_cfg := L.NewUserData()
-	ud_cfg.Value = config
-
 	res := L.NewTable()
-	L.RawSetInt(res, keyClient, ud_cli)
+	L.RawSetInt(res, keyClient, newUserData(L, client))
 	L.RawSetInt(res, keySubTable, L.NewTable())
-	L.RawSetInt(res, keyConfig, ud_cfg)
+	L.RawSetInt(res, keyConfig, newUserData(L, config))
 	L.SetMetatable(res, L.GetTypeMetatable(luaMqttClientTypeName))
 	L.RawSetInt(stateCnxTable(L), id, res)
 	L.Push(res)
