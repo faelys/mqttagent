@@ -290,16 +290,24 @@ type mqttConfig struct {
 	AtLeastOnceMax int
 	ExactlyOnceMax int
 	UserName       string
-	Password       []byte
+	Password       string
 	Will           struct {
 		Topic       string
-		Message     []byte
+		Message     string
 		Retain      bool
 		AtLeastOnce bool
 		ExactlyOnce bool
 	}
 	KeepAlive    uint16
 	CleanSession bool
+}
+
+func mqttConfigBytes(src string) []byte {
+	if src == "" {
+		return nil
+	} else {
+		return []byte(src)
+	}
 }
 
 func newClient(config *mqttConfig, id string) (*mqtt.Client, error) {
@@ -314,7 +322,7 @@ func newClient(config *mqttConfig, id string) (*mqtt.Client, error) {
 		AtLeastOnceMax: config.AtLeastOnceMax,
 		ExactlyOnceMax: config.ExactlyOnceMax,
 		UserName:       config.UserName,
-		Password:       config.Password,
+		Password:       mqttConfigBytes(config.Password),
 		Will: struct {
 			Topic       string
 			Message     []byte
@@ -323,7 +331,7 @@ func newClient(config *mqttConfig, id string) (*mqtt.Client, error) {
 			ExactlyOnce bool
 		}{
 			Topic:       config.Will.Topic,
-			Message:     config.Will.Message,
+			Message:     mqttConfigBytes(config.Will.Message),
 			Retain:      config.Will.Retain,
 			AtLeastOnce: config.Will.AtLeastOnce,
 			ExactlyOnce: config.Will.ExactlyOnce,
