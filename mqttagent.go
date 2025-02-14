@@ -464,20 +464,18 @@ func registerTimerType(L *lua.LState) {
 	mt := L.NewTypeMetatable(luaTimerTypeName)
 	L.SetGlobal(luaTimerTypeName, mt)
 	L.SetField(mt, "new", L.NewFunction(newTimer))
+	L.SetField(mt, "schedule", L.NewFunction(timerSchedule))
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), timerMethods))
 }
 
 func newTimer(L *lua.LState) int {
-	atTime := L.CheckNumber(1)
+	atTime := L.Get(1)
 	cb := L.CheckFunction(2)
-
-	tbl := L.NewTable()
-	L.RawSetInt(tbl, keyTime, atTime)
-	L.RawSetInt(tbl, keyCallback, cb)
-	L.SetMetatable(tbl, L.GetTypeMetatable(luaTimerTypeName))
-	stateTimerTable(L).Append(tbl)
-	L.Push(tbl)
-	return 1
+	L.Pop(2)
+	L.SetMetatable(cb, L.GetTypeMetatable(luaTimerTypeName))
+	L.Push(cb)
+	L.Push(atTime)
+	return timerSchedule(L)
 }
 
 var timerMethods = map[string]lua.LGFunction{
@@ -486,29 +484,28 @@ var timerMethods = map[string]lua.LGFunction{
 }
 
 func timerCancel(L *lua.LState) int {
-	tbl := L.CheckTable(1)
-	L.RawSetInt(tbl, keyTime, lua.LNil)
+	timer := L.CheckFunction(1)
+	L.RawSet(stateTimerTable(L), timer, lua.LNil)
 	return 0
 }
 
 func timerSchedule(L *lua.LState) int {
-	tbl := L.CheckTable(1)
-	atTime := L.CheckNumber(2)
-	L.RawSetInt(tbl, keyTime, atTime)
+	timer := L.CheckFunction(1)
+	atTime := lua.LNil
+	if L.Get(2) != lua.LNil {
+		atTime = L.CheckNumber(2)
+	}
+
+	L.RawSet(stateTimerTable(L), timer, atTime)
 	return 0
 }
 
-func toTime(v lua.LValue, d time.Time) (time.Time, bool) {
-	lsec, ok := v.(lua.LNumber)
-	if !ok {
-		return d, false
-	}
-
+func toTime(lsec lua.LNumber) time.Time {
 	fsec := float64(lsec)
 	sec := int64(fsec)
 	nsec := int64((fsec - float64(sec)) * 1.0e9)
 
-	return time.Unix(sec, nsec), true
+	return time.Unix(sec, nsec)
 }
 
 func runTimers(L *lua.LState) (bool, time.Time) {
@@ -518,26 +515,23 @@ func runTimers(L *lua.LState) (bool, time.Time) {
 	now := time.Now()
 	timers := stateTimerTable(L)
 
-	k, v := timers.Next(lua.LNil)
-	for k != lua.LNil {
-		tbl := v.(*lua.LTable)
-		luaT := L.RawGetInt(tbl, keyTime)
-		t, ok := toTime(luaT, now)
-		if !ok {
-		} else if t.Compare(now) <= 0 {
-			L.RawSetInt(tbl, keyTime, lua.LNil)
-			err := L.CallByParam(lua.P{Fn: L.RawGetInt(tbl, keyCallback), NRet: 0, Protect: true}, v, luaT)
+	timer, luaT := timers.Next(lua.LNil)
+	for timer != lua.LNil {
+		t := toTime(luaT.(lua.LNumber))
+		if t.Compare(now) <= 0 {
+			L.RawSet(timers, timer, lua.LNil)
+			err := L.CallByParam(lua.P{Fn: timer, NRet: 0, Protect: true}, timer, luaT)
 			if err != nil {
 				panic(err)
 			}
-			k = lua.LNil
+			timer = lua.LNil
 			hasNext = false
 		} else if !hasNext || t.Compare(nextTime) < 0 {
 			hasNext = true
 			nextTime = t
 		}
 
-		k, v = timers.Next(k)
+		timer, luaT = timers.Next(timer)
 	}
 
 	return hasNext, nextTime
