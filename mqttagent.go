@@ -234,13 +234,15 @@ func newUserData(L *lua.LState, v interface{}) *lua.LUserData {
 const luaStateName = "_mqttagent"
 const keyChanToLua = 1
 const keyClientPrefix = 2
-const keyCnxTable = 3
-const keyTimerTable = 4
+const keyClientNextId = 3
+const keyCnxTable = 4
+const keyTimerTable = 5
 
 func registerState(L *lua.LState, clientPrefix string, toLua chan<- MqttMessage) {
 	st := L.NewTable()
 	L.RawSetInt(st, keyChanToLua, newUserData(L, toLua))
 	L.RawSetInt(st, keyClientPrefix, lua.LString(clientPrefix))
+	L.RawSetInt(st, keyClientNextId, lua.LNumber(1))
 	L.RawSetInt(st, keyCnxTable, L.NewTable())
 	L.RawSetInt(st, keyTimerTable, L.NewTable())
 	L.SetGlobal(luaStateName, st)
@@ -258,6 +260,14 @@ func stateChanToLua(L *lua.LState) chan<- MqttMessage {
 
 func stateClientPrefix(L *lua.LState) string {
 	return lua.LVAsString(stateValue(L, keyClientPrefix))
+}
+
+func stateClientNextId(L *lua.LState) (int, string) {
+	st := L.GetGlobal(luaStateName).(*lua.LTable)
+	result := int(L.RawGetInt(st, keyClientNextId).(lua.LNumber))
+	L.RawSetInt(st, keyClientNextId, lua.LNumber(result + 1))
+	prefix := lua.LVAsString(L.RawGetInt(st, keyClientPrefix))
+	return result, fmt.Sprintf("%s-%d", prefix, result)
 }
 
 func stateCnxTable(L *lua.LState) *lua.LTable {
@@ -344,9 +354,6 @@ func newClient(config *mqttConfig, id string) (*mqtt.Client, error) {
 }
 
 func newMqttClient(L *lua.LState) int {
-	id := stateCnxTable(L).Len() + 1
-	idString := fmt.Sprintf("%s-%d", stateClientPrefix(L), id)
-
 	var config mqttConfig
 	if err := gluamapper.Map(L.CheckTable(1), &config); err != nil {
 		log.Println("newMqttClient:", err)
@@ -355,6 +362,7 @@ func newMqttClient(L *lua.LState) int {
 		return 2
 	}
 
+	id, idString := stateClientNextId(L)
 	client, err := newClient(&config, idString)
 	if err != nil {
 		log.Println("newMqttClient:", err)
