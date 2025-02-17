@@ -258,14 +258,10 @@ func stateChanToLua(L *lua.LState) chan<- MqttMessage {
 	return ud.(*lua.LUserData).Value.(chan<- MqttMessage)
 }
 
-func stateClientPrefix(L *lua.LState) string {
-	return lua.LVAsString(stateValue(L, keyClientPrefix))
-}
-
 func stateClientNextId(L *lua.LState) (int, string) {
 	st := L.GetGlobal(luaStateName).(*lua.LTable)
 	result := int(L.RawGetInt(st, keyClientNextId).(lua.LNumber))
-	L.RawSetInt(st, keyClientNextId, lua.LNumber(result + 1))
+	L.RawSetInt(st, keyClientNextId, lua.LNumber(result+1))
 	prefix := lua.LVAsString(L.RawGetInt(st, keyClientPrefix))
 	return result, fmt.Sprintf("%s-%d", prefix, result)
 }
@@ -465,8 +461,6 @@ func luaSubscribe(L *lua.LState) int {
 /********** Lua Object for timers **********/
 
 const luaTimerTypeName = "timer"
-const keyTime = 1
-const keyCallback = 2
 
 func registerTimerType(L *lua.LState) {
 	mt := L.NewTypeMetatable(luaTimerTypeName)
