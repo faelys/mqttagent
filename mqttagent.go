@@ -235,14 +235,16 @@ const luaStateName = "_mqttagent"
 const keyChanToLua = 1
 const keyClientPrefix = 2
 const keyClientNextId = 3
-const keyCnxTable = 4
-const keyTimerTable = 5
+const keyCfgMap = 4
+const keyCnxTable = 5
+const keyTimerTable = 6
 
 func registerState(L *lua.LState, clientPrefix string, toLua chan<- MqttMessage) {
 	st := L.NewTable()
 	L.RawSetInt(st, keyChanToLua, newUserData(L, toLua))
 	L.RawSetInt(st, keyClientPrefix, lua.LString(clientPrefix))
 	L.RawSetInt(st, keyClientNextId, lua.LNumber(1))
+	L.RawSetInt(st, keyCfgMap, newUserData(L, make(mqttConfigMap)))
 	L.RawSetInt(st, keyCnxTable, L.NewTable())
 	L.RawSetInt(st, keyTimerTable, L.NewTable())
 	L.SetGlobal(luaStateName, st)
@@ -264,6 +266,10 @@ func stateClientNextId(L *lua.LState) (int, string) {
 	L.RawSetInt(st, keyClientNextId, lua.LNumber(result+1))
 	prefix := lua.LVAsString(L.RawGetInt(st, keyClientPrefix))
 	return result, fmt.Sprintf("%s-%d", prefix, result)
+}
+
+func stateCfgMap(L *lua.LState) mqttConfigMap {
+	return stateValue(L, keyCfgMap).(*lua.LUserData).Value.(mqttConfigMap)
 }
 
 func stateCnxTable(L *lua.LState) *lua.LTable {
@@ -307,6 +313,13 @@ type mqttConfig struct {
 	KeepAlive    uint16
 	CleanSession bool
 }
+
+type mqttClientEntry struct {
+	client *mqtt.Client
+	id     int
+}
+
+type mqttConfigMap map[mqttConfig]mqttClientEntry
 
 func mqttConfigBytes(src string) []byte {
 	if src == "" {
@@ -358,6 +371,19 @@ func newMqttClient(L *lua.LState) int {
 		return 2
 	}
 
+	cfgMap := stateCfgMap(L)
+
+	if cfg, found := cfgMap[config]; found {
+		res := L.RawGetInt(stateCnxTable(L), cfg.id)
+		tbl := res.(*lua.LTable)
+		if L.RawGetInt(tbl, keyClient).(*lua.LUserData).Value.(*mqtt.Client) != cfg.client {
+			panic("Inconsistent configuration table")
+		}
+
+		L.Push(res)
+		return 1
+	}
+
 	id, idString := stateClientNextId(L)
 	client, err := newClient(&config, idString)
 	if err != nil {
@@ -367,6 +393,8 @@ func newMqttClient(L *lua.LState) int {
 		return 2
 	}
 	go mqttRead(client, stateChanToLua(L), id)
+
+	cfgMap[config] = mqttClientEntry{id: id, client: client}
 
 	res := L.NewTable()
 	L.RawSetInt(res, keyClient, newUserData(L, client))
