@@ -285,7 +285,6 @@ func stateTimerTable(L *lua.LState) *lua.LTable {
 const luaMqttClientTypeName = "mqttclient"
 const keyClient = 1
 const keySubTable = 2
-const keyConfig = 3
 
 func registerMqttClientType(L *lua.LState) {
 	mt := L.NewTypeMetatable(luaMqttClientTypeName)
@@ -399,7 +398,6 @@ func newMqttClient(L *lua.LState) int {
 	res := L.NewTable()
 	L.RawSetInt(res, keyClient, newUserData(L, client))
 	L.RawSetInt(res, keySubTable, L.NewTable())
-	L.RawSetInt(res, keyConfig, newUserData(L, config))
 	L.SetMetatable(res, L.GetTypeMetatable(luaMqttClientTypeName))
 	L.RawSetInt(stateCnxTable(L), id, res)
 	L.Push(res)
