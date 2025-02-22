@@ -85,13 +85,7 @@ func Run(agent MqttAgent, main_script string, capacity int) {
 		case <-timer.C:
 		}
 
-		hasTimer, nextTimer := runTimers(L)
-
-		if hasTimer {
-			timer.Reset(time.Until(nextTimer))
-		} else {
-			timer.Stop()
-		}
+		runTimers(L, timer)
 
 		if tableIsEmpty(stateCnxTable(L)) && tableIsEmpty(stateTimerTable(L)) {
 			break
@@ -536,7 +530,7 @@ func toTime(lsec lua.LNumber) time.Time {
 	return time.Unix(sec, nsec)
 }
 
-func runTimers(L *lua.LState) (bool, time.Time) {
+func runTimers(L *lua.LState, parentTimer *time.Timer) {
 	hasNext := false
 	var nextTime time.Time
 
@@ -562,5 +556,9 @@ func runTimers(L *lua.LState) (bool, time.Time) {
 		timer, luaT = timers.Next(timer)
 	}
 
-	return hasNext, nextTime
+	if hasNext {
+		parentTimer.Reset(time.Until(nextTime))
+	} else {
+		parentTimer.Stop()
+	}
 }
