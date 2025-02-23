@@ -87,6 +87,12 @@ func Run(agent MqttAgent, main_script string, capacity int) {
 
 		runTimers(L, timer)
 
+		if stateReloadRequested(L) {
+			L = reload(L, agent, main_script)
+			runTimers(L, timer)
+			stateRequestReload(L, lua.LNil)
+		}
+
 		if tableIsEmpty(stateCnxTable(L)) && tableIsEmpty(stateTimerTable(L)) {
 			break
 		}
@@ -211,6 +217,11 @@ func mqttRead(client *mqtt.Client, toLua chan<- MqttMessage, id int) {
 	}
 }
 
+func reload(oldL *lua.LState, agent MqttAgent, main_script string) *lua.LState {
+	log.Println("Reload is not implemented yet")
+	return oldL
+}
+
 func dup(src []byte) []byte {
 	res := make([]byte, len(src))
 	copy(res, src)
@@ -232,6 +243,7 @@ const keyClientNextId = 3
 const keyCfgMap = 4
 const keyCnxTable = 5
 const keyTimerTable = 6
+const keyReloadRequest = 7
 
 func registerState(L *lua.LState, clientPrefix string, toLua chan<- MqttMessage) {
 	st := L.NewTable()
@@ -242,6 +254,7 @@ func registerState(L *lua.LState, clientPrefix string, toLua chan<- MqttMessage)
 	L.RawSetInt(st, keyCnxTable, L.NewTable())
 	L.RawSetInt(st, keyTimerTable, L.NewTable())
 	L.SetGlobal(luaStateName, st)
+	L.SetGlobal("reload", L.NewFunction(requestReload))
 }
 
 func stateValue(L *lua.LState, key int) lua.LValue {
@@ -272,6 +285,20 @@ func stateCnxTable(L *lua.LState) *lua.LTable {
 
 func stateTimerTable(L *lua.LState) *lua.LTable {
 	return stateValue(L, keyTimerTable).(*lua.LTable)
+}
+
+func stateReloadRequested(L *lua.LState) bool {
+	return lua.LVAsBool(stateValue(L, keyReloadRequest))
+}
+
+func stateRequestReload(L *lua.LState, v lua.LValue) {
+	st := L.GetGlobal(luaStateName).(*lua.LTable)
+	L.RawSetInt(st, keyReloadRequest, v)
+}
+
+func requestReload(L *lua.LState) int {
+	stateRequestReload(L, lua.LTrue)
+	return 0
 }
 
 /********** Lua Object for MQTT client **********/
