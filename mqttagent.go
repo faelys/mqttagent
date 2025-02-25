@@ -218,8 +218,27 @@ func mqttRead(client *mqtt.Client, toLua chan<- MqttMessage, id int) {
 }
 
 func reload(oldL *lua.LState, agent MqttAgent, main_script string) *lua.LState {
-	log.Println("Reload is not implemented yet")
-	return oldL
+	log.Println("Reloading", main_script)
+	newL := lua.NewState()
+	agent.Setup(newL)
+	registerMqttClientType(newL)
+	registerTimerType(newL)
+
+	stateReloadBegin(oldL, newL)
+
+	if err := newL.DoFile(main_script); err != nil {
+		log.Println("Reload failed:", err)
+		cleanupClients(newL)
+		agent.Teardown(newL)
+		newL.Close()
+		return oldL
+	} else {
+		cleanupClients(oldL)
+		agent.Teardown(oldL)
+		oldL.Close()
+		log.Println("Reload successful")
+		return newL
+	}
 }
 
 func dup(src []byte) []byte {
@@ -255,6 +274,23 @@ func registerState(L *lua.LState, clientPrefix string, toLua chan<- MqttMessage)
 	L.RawSetInt(st, keyTimerTable, L.NewTable())
 	L.SetGlobal(luaStateName, st)
 	L.SetGlobal("reload", L.NewFunction(requestReload))
+}
+
+func stateReloadBegin(oldL, newL *lua.LState) {
+	oldSt := oldL.GetGlobal(luaStateName).(*lua.LTable)
+	toLua := oldL.RawGetInt(oldSt, keyChanToLua).(*lua.LUserData).Value.(chan<- MqttMessage)
+	clientPrefix := oldL.RawGetInt(oldSt, keyClientPrefix)
+	nextId := oldL.RawGetInt(oldSt, keyClientNextId)
+
+	st := newL.NewTable()
+	newL.RawSetInt(st, keyChanToLua, newUserData(newL, toLua))
+	newL.RawSetInt(st, keyClientPrefix, clientPrefix)
+	newL.RawSetInt(st, keyClientNextId, nextId)
+	newL.RawSetInt(st, keyCfgMap, newUserData(newL, make(mqttConfigMap)))
+	newL.RawSetInt(st, keyCnxTable, newL.NewTable())
+	newL.RawSetInt(st, keyTimerTable, newL.NewTable())
+	newL.SetGlobal(luaStateName, st)
+	newL.SetGlobal("reload", newL.NewFunction(requestReload))
 }
 
 func stateValue(L *lua.LState, key int) lua.LValue {
