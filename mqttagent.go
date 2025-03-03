@@ -35,6 +35,15 @@ type MqttAgent interface {
 	Teardown(L *lua.LState)
 }
 
+type MqttReloadingAgent interface {
+	Setup(L *lua.LState)
+	Log(L *lua.LState, msg *MqttMessage)
+	ReloadBegin(oldL, newL *lua.LState)
+	ReloadAbort(oldL, newL *lua.LState)
+	ReloadEnd(oldL, newL *lua.LState)
+	Teardown(L *lua.LState)
+}
+
 type MqttMessage struct {
 	Timestamp float64
 	ClientId  int
@@ -219,8 +228,16 @@ func mqttRead(client *mqtt.Client, toLua chan<- MqttMessage, id int) {
 
 func reload(oldL *lua.LState, agent MqttAgent, main_script string) *lua.LState {
 	log.Println("Reloading", main_script)
+	reloader, isReloader := agent.(MqttReloadingAgent)
+
 	newL := lua.NewState()
-	agent.Setup(newL)
+
+	if isReloader {
+		reloader.ReloadBegin(oldL, newL)
+	} else {
+		agent.Setup(newL)
+	}
+
 	registerMqttClientType(newL)
 	registerTimerType(newL)
 
@@ -229,12 +246,20 @@ func reload(oldL *lua.LState, agent MqttAgent, main_script string) *lua.LState {
 	if err := newL.DoFile(main_script); err != nil {
 		log.Println("Reload failed:", err)
 		stateReloadAbort(oldL, newL)
-		agent.Teardown(newL)
+		if isReloader {
+			reloader.ReloadAbort(oldL, newL)
+		} else {
+			agent.Teardown(newL)
+		}
 		newL.Close()
 		return oldL
 	} else {
 		stateReloadEnd(oldL, newL)
-		agent.Teardown(oldL)
+		if isReloader {
+			reloader.ReloadEnd(oldL, newL)
+		} else {
+			agent.Teardown(oldL)
+		}
 		oldL.Close()
 		log.Println("Reload successful")
 		return newL
