@@ -455,6 +455,7 @@ func registerMqttClientType(L *lua.LState) {
 
 type mqttConfig struct {
 	Connection     string
+	TLS            bool
 	PauseTimeout   string
 	AtLeastOnceMax int
 	ExactlyOnceMax int
@@ -492,8 +493,16 @@ func newClient(config *mqttConfig, id string) (*mqtt.Client, error) {
 		pto = time.Second
 	}
 
+	var dialer mqtt.Dialer
+
+	if config.TLS {
+		dialer = mqtt.NewTLSDialer("tcp", config.Connection, nil)
+	} else {
+		dialer = mqtt.NewDialer("tcp", config.Connection)
+	}
+
 	processed_cfg := mqtt.Config{
-		Dialer:         mqtt.NewDialer("tcp", config.Connection),
+		Dialer:         dialer,
 		PauseTimeout:   pto,
 		AtLeastOnceMax: config.AtLeastOnceMax,
 		ExactlyOnceMax: config.ExactlyOnceMax,
