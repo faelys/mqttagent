@@ -101,44 +101,23 @@ func (agent *fullMqttAgent) connect(connectionString string) error {
 		return err
 	}
 
-	_, err = db.Exec(`
-CREATE TABLE IF NOT EXISTS
-  topics(id INTEGER PRIMARY KEY AUTOINCREMENT,
-         name TEXT NOT NULL);
-`)
-	if err != nil {
-		db.Close()
-		return err
-	}
-
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS i_topics ON topics(name);")
-	if err != nil {
-		db.Close()
-		return err
-	}
-
-	_, err = db.Exec(`
-CREATE TABLE IF NOT EXISTS
-  received(timestamp INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
-           topic_id INTEGER NOT NULL,
-           message TEXT NOT NULL,
-           FOREIGN KEY (topic_id) REFERENCES topics (id));
-`)
-	if err != nil {
-		db.Close()
-		return err
-	}
-
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS i_time ON received(timestamp);")
-	if err != nil {
-		db.Close()
-		return err
-	}
-
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS i_topicid ON received(topic_id);")
-	if err != nil {
-		db.Close()
-		return err
+	for _, cmd := range []string{
+		"CREATE TABLE IF NOT EXISTS topics" +
+			"(id INTEGER PRIMARY KEY AUTOINCREMENT," +
+			" name TEXT NOT NULL);",
+		"CREATE INDEX IF NOT EXISTS i_topics ON topics(name);",
+		"CREATE TABLE IF NOT EXISTS received" +
+			"(timestamp INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+			" topic_id INTEGER NOT NULL," +
+			" message TEXT NOT NULL," +
+			" FOREIGN KEY (topic_id) REFERENCES topics (id));",
+		"CREATE INDEX IF NOT EXISTS i_time ON received(timestamp);",
+		"CREATE INDEX IF NOT EXISTS i_topicid ON received(topic_id);",
+	} {
+		if _, err = db.Exec(cmd); err != nil {
+			db.Close()
+			return err
+		}
 	}
 
 	s1, err := db.Prepare("INSERT OR IGNORE INTO topics(name) VALUES (?);")
