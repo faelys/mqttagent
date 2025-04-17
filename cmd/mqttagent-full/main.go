@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"time"
 
 	_ "github.com/glebarez/go-sqlite"
 	luajson "github.com/layeh/gopher-json"
@@ -33,6 +34,11 @@ type fullMqttAgent struct {
 
 func (agent *fullMqttAgent) Setup(L *lua.LState) {
 	luajson.Preload(L)
+
+	mt := L.NewTypeMetatable("sqlogger")
+	L.SetGlobal("sqlogger", mt)
+	L.SetField(mt, "new", L.NewFunction(luaSqloggerNew))
+	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), luaSqloggerMethods))
 
 	L.SetGlobal("sqlog", L.NewFunction(func(L *lua.LState) int {
 		arg := L.CheckString(1)
@@ -143,6 +149,50 @@ VALUES (?, (SELECT id FROM topics WHERE name = ?), ?);
 	}
 
 	return &sqlogger{db: db, insertTopic: s1, insertReceived: s2}, nil
+}
+
+func checkSqlogger(L *lua.LState, index int) *sqlogger {
+	ud := L.CheckUserData(index)
+	if v, ok := ud.Value.(*sqlogger); ok {
+		return v
+	}
+	L.ArgError(index, "sqlogger expected")
+	return nil
+}
+
+func luaSqloggerNew(L *lua.LState) int {
+	arg := L.CheckString(1)
+	if logger, err := connect(arg); err != nil {
+		log.Println(err)
+		L.Push(lua.LNil)
+		L.Push(lua.LString(err.Error()))
+		return 2
+	} else {
+		ud := L.NewUserData()
+		ud.Value = logger
+		L.SetMetatable(ud, L.GetTypeMetatable("sqlogger"))
+		L.Push(ud)
+		return 1
+	}
+}
+
+func luaSqloggerReceived(L *lua.LState) int {
+	logger := checkSqlogger(L, 1)
+	message := L.CheckString(2)
+	topic := L.CheckString(3)
+	timestamp := L.OptNumber(4, lua.LNumber(time.Now().UnixMicro())*1.0e-6)
+
+	logger.Received(&mqttagent.MqttMessage{
+		Timestamp: float64(timestamp),
+		ClientId:  -1,
+		Message:   []byte(message),
+		Topic:     []byte(topic),
+	})
+	return 0
+}
+
+var luaSqloggerMethods = map[string]lua.LGFunction{
+	"received": luaSqloggerReceived,
 }
 
 func main() {
