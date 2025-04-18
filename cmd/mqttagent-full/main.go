@@ -29,7 +29,6 @@ import (
 )
 
 type fullMqttAgent struct {
-	logger *sqlogger
 }
 
 func (agent *fullMqttAgent) Setup(L *lua.LState) {
@@ -39,28 +38,11 @@ func (agent *fullMqttAgent) Setup(L *lua.LState) {
 	L.SetGlobal("sqlogger", mt)
 	L.SetField(mt, "new", L.NewFunction(luaSqloggerNew))
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), luaSqloggerMethods))
-
-	L.SetGlobal("sqlog", L.NewFunction(func(L *lua.LState) int {
-		arg := L.CheckString(1)
-		if logger, err := connect(arg); err != nil {
-			log.Println(err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
-			return 2
-		} else {
-			agent.logger.Close()
-			agent.logger = logger
-			L.Push(lua.LTrue)
-			return 1
-		}
-	}))
 }
 
-func (agent *fullMqttAgent) Log(L *lua.LState, msg *mqttagent.MqttMessage) {
-	if agent.logger != nil {
-		agent.logger.Received(msg)
-	}
-}
+func (agent *fullMqttAgent) Log(L *lua.LState, msg *mqttagent.MqttMessage) {}
+
+func (agent *fullMqttAgent) Teardown(L *lua.LState) {}
 
 func (logger *sqlogger) Received(msg *mqttagent.MqttMessage) {
 	if logger.insertTopic == nil || logger.insertReceived == nil {
@@ -76,11 +58,6 @@ func (logger *sqlogger) Received(msg *mqttagent.MqttMessage) {
 		log.Println(err)
 		return
 	}
-}
-
-func (agent *fullMqttAgent) Teardown(L *lua.LState) {
-	agent.logger.Close()
-	agent.logger = nil
 }
 
 type sqlogger struct {
