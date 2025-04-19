@@ -29,6 +29,7 @@ import (
 )
 
 type fullMqttAgent struct {
+	loggers map[string]*sqlogger
 }
 
 func (agent *fullMqttAgent) Setup(L *lua.LState) {
@@ -36,13 +37,20 @@ func (agent *fullMqttAgent) Setup(L *lua.LState) {
 
 	mt := L.NewTypeMetatable("sqlogger")
 	L.SetGlobal("sqlogger", mt)
-	L.SetField(mt, "new", L.NewFunction(luaSqloggerNew))
+	L.SetField(mt, "new", L.NewFunction(func(L *lua.LState) int {
+		return luaSqloggerNew(L, agent)
+	}))
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), luaSqloggerMethods))
 }
 
 func (agent *fullMqttAgent) Log(L *lua.LState, msg *mqttagent.MqttMessage) {}
 
-func (agent *fullMqttAgent) Teardown(L *lua.LState) {}
+func (agent *fullMqttAgent) Teardown(L *lua.LState) {
+	for _, logger := range agent.loggers {
+		logger.Close()
+	}
+	agent.loggers = nil
+}
 
 func (logger *sqlogger) Received(msg *mqttagent.MqttMessage) {
 	if logger.insertTopic == nil || logger.insertReceived == nil {
@@ -137,14 +145,21 @@ func checkSqlogger(L *lua.LState, index int) *sqlogger {
 	return nil
 }
 
-func luaSqloggerNew(L *lua.LState) int {
+func luaSqloggerNew(L *lua.LState, agent *fullMqttAgent) int {
 	arg := L.CheckString(1)
-	if logger, err := connect(arg); err != nil {
+	if logger, found := agent.loggers[arg]; found {
+		ud := L.NewUserData()
+		ud.Value = logger
+		L.SetMetatable(ud, L.GetTypeMetatable("sqlogger"))
+		L.Push(ud)
+		return 1
+	} else if logger, err := connect(arg); err != nil {
 		log.Println(err)
 		L.Push(lua.LNil)
 		L.Push(lua.LString(err.Error()))
 		return 2
 	} else {
+		agent.loggers[arg] = logger
 		ud := L.NewUserData()
 		ud.Value = logger
 		L.SetMetatable(ud, L.GetTypeMetatable("sqlogger"))
