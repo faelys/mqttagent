@@ -43,8 +43,6 @@ func (agent *fullMqttAgent) Setup(L *lua.LState) {
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), luaSqloggerMethods))
 }
 
-func (agent *fullMqttAgent) Log(L *lua.LState, msg *mqttagent.MqttMessage) {}
-
 func (agent *fullMqttAgent) Teardown(L *lua.LState) {
 	for _, logger := range agent.loggers {
 		logger.Close()

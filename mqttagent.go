@@ -31,13 +31,11 @@ import (
 
 type MqttAgent interface {
 	Setup(L *lua.LState)
-	Log(L *lua.LState, msg *MqttMessage)
 	Teardown(L *lua.LState)
 }
 
 type MqttReloadingAgent interface {
 	Setup(L *lua.LState)
-	Log(L *lua.LState, msg *MqttMessage)
 	ReloadBegin(oldL, newL *lua.LState)
 	ReloadAbort(oldL, newL *lua.LState)
 	ReloadEnd(oldL, newL *lua.LState)
@@ -177,8 +175,6 @@ func tableIsEmpty(t *lua.LTable) bool {
 }
 
 func processMsg(L *lua.LState, msg *MqttMessage) {
-	stateAgent(L).Log(L, msg)
-
 	cnx := L.RawGetInt(stateCnxTable(L), msg.ClientId).(*lua.LTable)
 	subTbl := L.RawGetInt(cnx, keySubTable).(*lua.LTable)
 	L.ForEach(subTbl, func(key, value lua.LValue) { dispatchMsg(L, msg, cnx, key, value) })

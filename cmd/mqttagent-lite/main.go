@@ -19,15 +19,14 @@ package main
 import (
 	"os"
 
-	"instinctive.eu/go/mqttagent"
 	"github.com/yuin/gopher-lua"
+	"instinctive.eu/go/mqttagent"
 )
 
 type liteMqttAgent struct{}
 
-func (agent liteMqttAgent) Setup(L *lua.LState)                           {}
-func (agent liteMqttAgent) Log(L *lua.LState, msg *mqttagent.MqttMessage) {}
-func (agent liteMqttAgent) Teardown(L *lua.LState)                        {}
+func (agent liteMqttAgent) Setup(L *lua.LState)    {}
+func (agent liteMqttAgent) Teardown(L *lua.LState) {}
 
 func main() {
 	var agent liteMqttAgent
