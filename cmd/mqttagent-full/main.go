@@ -29,11 +29,13 @@ import (
 )
 
 type fullMqttAgent struct {
-	loggers map[string]*sqlogger
+	loggers    map[string]*sqlogger
+	oldLoggers map[string]*sqlogger
 }
 
 func (agent *fullMqttAgent) Setup(L *lua.LState) {
 	luajson.Preload(L)
+	agent.loggers = make(map[string]*sqlogger)
 
 	mt := L.NewTypeMetatable("sqlogger")
 	L.SetGlobal("sqlogger", mt)
@@ -44,10 +46,40 @@ func (agent *fullMqttAgent) Setup(L *lua.LState) {
 }
 
 func (agent *fullMqttAgent) Teardown(L *lua.LState) {
+	if agent.oldLoggers != nil {
+		panic("Unexpected state")
+	}
 	for _, logger := range agent.loggers {
 		logger.Close()
 	}
 	agent.loggers = nil
+}
+
+func (agent *fullMqttAgent) ReloadBegin(oldL, newL *lua.LState) {
+	if agent.oldLoggers != nil {
+		panic("Unexpected state")
+	}
+	agent.oldLoggers = agent.loggers
+	agent.Setup(newL)
+}
+
+func (agent *fullMqttAgent) ReloadAbort(oldL, newL *lua.LState) {
+	for key, logger := range agent.loggers {
+		if _, found := agent.oldLoggers[key]; !found {
+			logger.Close()
+		}
+	}
+	agent.loggers = agent.oldLoggers
+	agent.oldLoggers = nil
+}
+
+func (agent *fullMqttAgent) ReloadEnd(oldL, newL *lua.LState) {
+	for key, logger := range agent.oldLoggers {
+		if _, found := agent.loggers[key]; !found {
+			logger.Close()
+		}
+	}
+	agent.oldLoggers = nil
 }
 
 func (logger *sqlogger) Received(msg *mqttagent.MqttMessage) {
@@ -146,6 +178,13 @@ func checkSqlogger(L *lua.LState, index int) *sqlogger {
 func luaSqloggerNew(L *lua.LState, agent *fullMqttAgent) int {
 	arg := L.CheckString(1)
 	if logger, found := agent.loggers[arg]; found {
+		ud := L.NewUserData()
+		ud.Value = logger
+		L.SetMetatable(ud, L.GetTypeMetatable("sqlogger"))
+		L.Push(ud)
+		return 1
+	} else if logger, found := agent.oldLoggers[arg]; found {
+		agent.loggers[arg] = logger
 		ud := L.NewUserData()
 		ud.Value = logger
 		L.SetMetatable(ud, L.GetTypeMetatable("sqlogger"))
