@@ -132,9 +132,9 @@ func connect(connectionString string) (*sqlogger, error) {
 		"CREATE TABLE IF NOT EXISTS topics" +
 			"(id INTEGER PRIMARY KEY AUTOINCREMENT," +
 			" name TEXT NOT NULL);",
-		"CREATE INDEX IF NOT EXISTS i_topics ON topics(name);",
+		"CREATE UNIQUE INDEX IF NOT EXISTS i_topics ON topics(name);",
 		"CREATE TABLE IF NOT EXISTS received" +
-			"(timestamp INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+			"(timestamp REAL NOT NULL," +
 			" topic_id INTEGER NOT NULL," +
 			" message TEXT NOT NULL," +
 			" FOREIGN KEY (topic_id) REFERENCES topics (id));",
