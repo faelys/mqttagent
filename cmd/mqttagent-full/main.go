@@ -83,25 +83,19 @@ func (agent *fullMqttAgent) ReloadEnd(oldL, newL *lua.LState) {
 }
 
 func (logger *sqlogger) Received(msg *mqttagent.MqttMessage) {
-	if logger.insertTopic == nil || logger.insertReceived == nil {
+	if logger == nil || logger.insert == nil {
 		return
 	}
 
-	if _, err := logger.insertTopic.Exec(msg.Topic); err != nil {
-		log.Println(err)
-		return
-	}
-
-	if _, err := logger.insertReceived.Exec((msg.Timestamp/86400.0)+2440587.5, msg.Topic, msg.Message); err != nil {
+	if _, err := logger.insert.Exec((msg.Timestamp/86400.0)+2440587.5, msg.Topic, msg.Message); err != nil {
 		log.Println(err)
 		return
 	}
 }
 
 type sqlogger struct {
-	db             *sql.DB
-	insertTopic    *sql.Stmt
-	insertReceived *sql.Stmt
+	db     *sql.DB
+	insert *sql.Stmt
 }
 
 func (logger *sqlogger) Close() {
@@ -109,12 +103,8 @@ func (logger *sqlogger) Close() {
 		return
 	}
 
-	if logger.insertReceived != nil {
-		logger.insertReceived.Close()
-	}
-
-	if logger.insertTopic != nil {
-		logger.insertTopic.Close()
+	if logger.insert != nil {
+		logger.insert.Close()
 	}
 
 	if logger.db != nil {
@@ -140,6 +130,20 @@ func connect(connectionString string) (*sqlogger, error) {
 			" FOREIGN KEY (topic_id) REFERENCES topics (id));",
 		"CREATE INDEX IF NOT EXISTS i_time ON received(timestamp);",
 		"CREATE INDEX IF NOT EXISTS i_topicid ON received(topic_id);",
+		"CREATE VIEW IF NOT EXISTS receivedf" +
+			"(timestamp,topic,message)" +
+			" AS SELECT datetime(timestamp),topics.name,message" +
+			" FROM received LEFT OUTER JOIN topics" +
+			" ON topics.id = topic_id;",
+		"CREATE TRIGGER IF NOT EXISTS insert_received" +
+			" INSTEAD OF INSERT ON receivedf BEGIN" +
+			" INSERT INTO topics(name)" +
+			" SELECT NEW.topic WHERE NOT EXISTS" +
+			" (SELECT 1 FROM topics WHERE name = NEW.topic);" +
+			" INSERT INTO received(timestamp,topic_id,message)" +
+			" VALUES (NEW.timestamp," +
+			" (SELECT id FROM topics WHERE name = NEW.topic)," +
+			" NEW.message); END;",
 	} {
 		if _, err = db.Exec(cmd); err != nil {
 			db.Close()
@@ -147,23 +151,14 @@ func connect(connectionString string) (*sqlogger, error) {
 		}
 	}
 
-	s1, err := db.Prepare("INSERT OR IGNORE INTO topics(name) VALUES (?);")
+	s, err := db.Prepare("INSERT INTO receivedf(timestamp,topic,message)" +
+		" VALUES (?,?,?);")
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
 
-	s2, err := db.Prepare(`
-INSERT INTO received (timestamp, topic_id, message)
-VALUES (?, (SELECT id FROM topics WHERE name = ?), ?);
-`)
-	if err != nil {
-		s1.Close()
-		db.Close()
-		return nil, err
-	}
-
-	return &sqlogger{db: db, insertTopic: s1, insertReceived: s2}, nil
+	return &sqlogger{db: db, insert: s}, nil
 }
 
 func checkSqlogger(L *lua.LState, index int) *sqlogger {
