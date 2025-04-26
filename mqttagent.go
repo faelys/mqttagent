@@ -42,7 +42,7 @@ type MqttReloadingAgent interface {
 	Teardown(L *lua.LState)
 }
 
-type MqttMessage struct {
+type mqttMessage struct {
 	Timestamp float64
 	ClientId  int
 	Topic     []byte
@@ -50,7 +50,7 @@ type MqttMessage struct {
 }
 
 func Run(agent MqttAgent, main_script string, capacity int) {
-	fromMqtt := make(chan MqttMessage, capacity)
+	fromMqtt := make(chan mqttMessage, capacity)
 
 	L := lua.NewState()
 	defer L.Close()
@@ -123,7 +123,7 @@ func cleanupClients(L *lua.LState) {
 	})
 }
 
-func dispatchMsg(L *lua.LState, msg *MqttMessage, cnx, key, value lua.LValue) {
+func dispatchMsg(L *lua.LState, msg *mqttMessage, cnx, key, value lua.LValue) {
 	skey, ok := key.(lua.LString)
 	topic := string(msg.Topic)
 
@@ -174,7 +174,7 @@ func tableIsEmpty(t *lua.LTable) bool {
 	return key == lua.LNil
 }
 
-func processMsg(L *lua.LState, msg *MqttMessage) {
+func processMsg(L *lua.LState, msg *mqttMessage) {
 	cnx := L.RawGetInt(stateCnxTable(L), msg.ClientId).(*lua.LTable)
 	subTbl := L.RawGetInt(cnx, keySubTable).(*lua.LTable)
 	L.ForEach(subTbl, func(key, value lua.LValue) { dispatchMsg(L, msg, cnx, key, value) })
@@ -188,7 +188,7 @@ func processMsg(L *lua.LState, msg *MqttMessage) {
 	}
 }
 
-func mqttRead(client *mqtt.Client, toLua chan<- MqttMessage, id int) {
+func mqttRead(client *mqtt.Client, toLua chan<- mqttMessage, id int) {
 	var big *mqtt.BigMessage
 
 	for {
@@ -197,14 +197,14 @@ func mqttRead(client *mqtt.Client, toLua chan<- MqttMessage, id int) {
 
 		switch {
 		case err == nil:
-			toLua <- MqttMessage{Timestamp: t, ClientId: id, Topic: dup(topic), Message: dup(message)}
+			toLua <- mqttMessage{Timestamp: t, ClientId: id, Topic: dup(topic), Message: dup(message)}
 
 		case errors.As(err, &big):
 			data, err := big.ReadAll()
 			if err != nil {
 				log.Println("mqttRead big message:", err)
 			} else {
-				toLua <- MqttMessage{Timestamp: t, ClientId: id, Topic: dup(topic), Message: data}
+				toLua <- mqttMessage{Timestamp: t, ClientId: id, Topic: dup(topic), Message: data}
 			}
 
 		case errors.Is(err, mqtt.ErrClosed):
@@ -288,7 +288,7 @@ const keyTimerTable = 7
 const keyReloadRequest = 8
 const keyOldCfgMap = 9
 
-func registerState(L *lua.LState, agent MqttAgent, clientPrefix string, toLua chan<- MqttMessage) {
+func registerState(L *lua.LState, agent MqttAgent, clientPrefix string, toLua chan<- mqttMessage) {
 	st := L.NewTable()
 	L.RawSetInt(st, keyChanToLua, newUserData(L, toLua))
 	L.RawSetInt(st, keyAgent, newUserData(L, agent))
@@ -303,7 +303,7 @@ func registerState(L *lua.LState, agent MqttAgent, clientPrefix string, toLua ch
 
 func stateReloadBegin(oldL, newL *lua.LState) {
 	oldSt := oldL.GetGlobal(luaStateName).(*lua.LTable)
-	toLua := oldL.RawGetInt(oldSt, keyChanToLua).(*lua.LUserData).Value.(chan<- MqttMessage)
+	toLua := oldL.RawGetInt(oldSt, keyChanToLua).(*lua.LUserData).Value.(chan<- mqttMessage)
 	agent := oldL.RawGetInt(oldSt, keyAgent).(*lua.LUserData).Value.(MqttAgent)
 	clientPrefix := oldL.RawGetInt(oldSt, keyClientPrefix)
 	nextId := oldL.RawGetInt(oldSt, keyClientNextId)
@@ -390,9 +390,9 @@ func stateValue(L *lua.LState, key int) lua.LValue {
 	return L.RawGetInt(st.(*lua.LTable), key)
 }
 
-func stateChanToLua(L *lua.LState) chan<- MqttMessage {
+func stateChanToLua(L *lua.LState) chan<- mqttMessage {
 	ud := stateValue(L, keyChanToLua)
-	return ud.(*lua.LUserData).Value.(chan<- MqttMessage)
+	return ud.(*lua.LUserData).Value.(chan<- mqttMessage)
 }
 
 func stateAgent(L *lua.LState) MqttAgent {
