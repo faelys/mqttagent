@@ -73,6 +73,19 @@ twice, each callback will be called twice).
 Since QoS is not supported yet, callbacks should always be ready to handle
 multiple and missing messages anyway.
 
+### Internal event callbacks
+
+When the connection of a client comes up or down, Lua callback is triggered
+as if an empty message has been sent on topic `$SYS/self/online` or
+`$SYS/self/offline`.
+
+Note that due to being offline, the client should not be used in the offline
+callback.
+
+Also note that mqttagent assumes without checking that subscriptions are
+preserved by the broker when coming back online.
+The online callback is a good place to resubscribe if needed.
+
 ### MQTT message sending
 
 The client has a function-like API to send messages:

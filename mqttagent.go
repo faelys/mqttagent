@@ -188,6 +188,28 @@ func processMsg(L *lua.LState, msg *mqttMessage) {
 	}
 }
 
+func mqttMonitor(client *mqtt.Client, toLua chan<- mqttMessage, id int) {
+	for {
+		<-client.Online()
+		log.Println("Online client", id)
+		toLua <- mqttMessage{
+			Timestamp: float64(time.Now().UnixMicro()) * 1.0e-6,
+			ClientId:  id,
+			Topic:     []byte("$SYS/self/online"),
+			Message:   []byte{},
+		}
+
+		<-client.Offline()
+		log.Println("Offline client", id)
+		toLua <- mqttMessage{
+			Timestamp: float64(time.Now().UnixMicro()) * 1.0e-6,
+			ClientId:  id,
+			Topic:     []byte("$SYS/self/offline"),
+			Message:   []byte{},
+		}
+	}
+}
+
 func mqttRead(client *mqtt.Client, toLua chan<- mqttMessage, id int) {
 	var big *mqtt.BigMessage
 
@@ -584,6 +606,7 @@ func newMqttClient(L *lua.LState) int {
 		L.Push(lua.LString(err.Error()))
 		return 2
 	}
+	go mqttMonitor(client, stateChanToLua(L), id)
 	go mqttRead(client, stateChanToLua(L), id)
 
 	cfgMap[config] = mqttClientEntry{id: id, client: client}
