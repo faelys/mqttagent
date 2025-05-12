@@ -188,7 +188,17 @@ func processMsg(L *lua.LState, msg *mqttMessage) {
 	}
 }
 
-func mqttMonitor(client *mqtt.Client, toLua chan<- mqttMessage, id int) {
+func mqttMonitor(client *mqtt.Client, toLua chan<- mqttMessage, id int, keepAliveS uint16) {
+	var tickerCh <-chan time.Time
+	var ticker *time.Ticker = nil
+	defer func() {
+		if ticker != nil {
+			ticker.Stop()
+		}
+	}()
+
+	keepAlive := time.Duration(keepAliveS) * time.Second
+
 	for {
 		<-client.Online()
 		log.Println("Online client", id)
@@ -199,7 +209,30 @@ func mqttMonitor(client *mqtt.Client, toLua chan<- mqttMessage, id int) {
 			Message:   []byte{},
 		}
 
-		<-client.Offline()
+		if keepAliveS > 0 {
+			ticker = time.NewTicker(keepAlive)
+			tickerCh = ticker.C
+		}
+
+		online := true
+
+		for online {
+			select {
+			case <-client.Offline():
+				online = false
+			case <-tickerCh:
+				if err := client.Ping(nil); err != nil {
+					log.Println("Ping:", err)
+				}
+			}
+		}
+
+		if ticker != nil {
+			ticker.Stop()
+			ticker = nil
+			tickerCh = nil
+		}
+
 		log.Println("Offline client", id)
 		toLua <- mqttMessage{
 			Timestamp: float64(time.Now().UnixMicro()) * 1.0e-6,
@@ -606,7 +639,7 @@ func newMqttClient(L *lua.LState) int {
 		L.Push(lua.LString(err.Error()))
 		return 2
 	}
-	go mqttMonitor(client, stateChanToLua(L), id)
+	go mqttMonitor(client, stateChanToLua(L), id, config.KeepAlive)
 	go mqttRead(client, stateChanToLua(L), id)
 
 	cfgMap[config] = mqttClientEntry{id: id, client: client}
