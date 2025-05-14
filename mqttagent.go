@@ -406,7 +406,9 @@ func statePartialCleanup(staleL, keptL *lua.LState) {
 			tbl := value.(*lua.LTable)
 			client := staleL.RawGetInt(tbl, keyClient).(*lua.LUserData).Value.(*mqtt.Client)
 			close(staleL.RawGetInt(tbl, keyCloseSig).(*lua.LUserData).Value.(chan struct{}))
-			client.Close()
+			if err := client.Disconnect(nil); err != nil {
+				log.Printf("cleanup stale client %s: %v", lua.LVAsString(key), err)
+			}
 		}
 	})
 
