@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"runtime/debug"
 	"time"
 
 	_ "github.com/glebarez/go-sqlite"
@@ -35,6 +36,8 @@ type fullMqttAgent struct {
 
 func (agent *fullMqttAgent) Setup(L *lua.LState) {
 	luajson.Preload(L)
+	setBuildInfo(L, "buildinfo")
+	setVersion(L, "version")
 	agent.loggers = make(map[string]*sqlogger)
 
 	mt := L.NewTypeMetatable("sqlogger")
@@ -249,6 +252,90 @@ func luaSqloggerSent(L *lua.LState) int {
 var luaSqloggerMethods = map[string]lua.LGFunction{
 	"received": luaSqloggerReceived,
 	"sent":     luaSqloggerSent,
+}
+
+func setBuildInfo(L *lua.LState, name string) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+
+	L.SetGlobal(name, luaBuildInfo(L, info))
+}
+
+func setVersion(L *lua.LState, name string) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+
+	version := info.Main.Version
+
+	if version == "(devel)" {
+		vcs := ""
+		rev := ""
+		dirty := ""
+		for _, setting := range info.Settings {
+			switch setting.Key {
+			case "vcs":
+				vcs = setting.Value + "-"
+			case "vcs.revision":
+				rev = setting.Value[0:8]
+			case "vcs.modified":
+				if setting.Value == "true" {
+					dirty = "*"
+				}
+			}
+		}
+
+		if rev != "" {
+			version = vcs + rev + dirty
+		}
+	}
+
+	L.SetGlobal(name, lua.LString(version))
+}
+
+func luaBuildInfo(L *lua.LState, info *debug.BuildInfo) lua.LValue {
+	tbl := L.NewTable()
+	tbl.RawSetString("go_version", lua.LString(info.GoVersion))
+	tbl.RawSetString("path", lua.LString(info.Path))
+	tbl.RawSetString("main", luaModule(L, &info.Main))
+	tbl.RawSetString("deps", luaModules(L, info.Deps))
+	tbl.RawSetString("settings", luaSettings(L, info.Settings))
+	return tbl
+}
+
+func luaModule(L *lua.LState, module *debug.Module) lua.LValue {
+	tbl := L.NewTable()
+	tbl.RawSetString("path", lua.LString(module.Path))
+	tbl.RawSetString("version", lua.LString(module.Version))
+	tbl.RawSetString("sum", lua.LString(module.Sum))
+
+	if module.Replace != nil {
+		tbl.RawSetString("replace", luaModule(L, module.Replace))
+	}
+	return tbl
+}
+
+func luaModules(L *lua.LState, modules []*debug.Module) lua.LValue {
+	tbl := L.NewTable()
+
+	for index, module := range modules {
+		tbl.RawSetInt(index+1, luaModule(L, module))
+	}
+
+	return tbl
+}
+
+func luaSettings(L *lua.LState, settings []debug.BuildSetting) lua.LValue {
+	tbl := L.NewTable()
+
+	for _, setting := range settings {
+		tbl.RawSetString(setting.Key, lua.LString(setting.Value))
+	}
+
+	return tbl
 }
 
 func main() {
