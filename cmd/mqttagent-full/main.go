@@ -91,21 +91,27 @@ type sqlogger struct {
 	insertSent     *sql.Stmt
 }
 
+func logErr(context string, err error) {
+	if err != nil {
+		log.Println(context, err)
+	}
+}
+
 func (logger *sqlogger) Close() {
 	if logger == nil {
 		return
 	}
 
 	if logger.insertReceived != nil {
-		logger.insertReceived.Close()
+		logErr("Close insertReceived:", logger.insertReceived.Close())
 	}
 
 	if logger.insertSent != nil {
-		logger.insertSent.Close()
+		logErr("Close insertSend:", logger.insertSent.Close())
 	}
 
 	if logger.db != nil {
-		logger.db.Close()
+		logErr("Close DB:", logger.db.Close())
 	}
 }
 
@@ -164,7 +170,7 @@ func connect(connectionString string) (*sqlogger, error) {
 			" NEW.message); END;",
 	} {
 		if _, err = db.Exec(cmd); err != nil {
-			db.Close()
+			logErr("Close DB:", db.Close())
 			return nil, err
 		}
 	}
@@ -172,15 +178,15 @@ func connect(connectionString string) (*sqlogger, error) {
 	s1, err := db.Prepare("INSERT INTO receivedf(timestamp,topic,message)" +
 		" VALUES (?,?,?);")
 	if err != nil {
-		db.Close()
+		logErr("Close DB:", db.Close())
 		return nil, err
 	}
 
 	s2, err := db.Prepare("INSERT INTO sentf(timestamp,topic,message)" +
 		" VALUES (?,?,?);")
 	if err != nil {
-		s1.Close()
-		db.Close()
+		logErr("Close insertReceived:", s1.Close())
+		logErr("Close DB:", db.Close())
 		return nil, err
 	}
 
