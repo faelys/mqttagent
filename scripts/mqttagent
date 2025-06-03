@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# PROVIDE: mqttagent
+# REQUIRE: DAEMON
+# KEYWORD: shutdown
+#
+# Add the following lines to /etc/rc.conf to run NATS:
+#
+# mqttagent_enable (bool):	Set it to "YES" to enable mqttagent server.
+#				Default is "NO".
+# mqttagent_user:		User name to run as. default "mqttagent"
+# mqttagent_group:		Group name to run as. default "mqttagent"
+# mqttagent_options:		Options to pass mqttagent server
+#
+
+. /etc/rc.subr
+
+name=mqttagent
+rcvar=`set_rcvar`
+
+load_rc_config ${name}
+
+: ${mqttagent_enable:=NO}
+: ${mqttagent_user:=mqttagent}
+: ${mqttagent_group:=mqttagent}
+: ${mqttagent_options="/usr/local/etc/mqttagent.lua"}
+
+start_precmd=mqttagent_start_precmd
+
+pidfile="/var/run/${name}.pid"
+procname=/usr/local/bin/mqttagent
+command=/usr/sbin/daemon
+command_args="-cfST ${name} -p ${pidfile} ${procname} ${mqttagent_options}"
+
+mqttagent_start_precmd()
+{
+    install -o ${mqttagent_user} -g ${mqttagent_group} /dev/null ${pidfile}
+}
+
+run_rc_command "$1"
