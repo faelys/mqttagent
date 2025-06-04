@@ -3,6 +3,7 @@ module instinctive.eu/go/mqttagent
 go 1.21.9
 
 require (
+	github.com/cjoudrey/gluahttp v0.0.0-20201111170219-25003d9adfa9
 	github.com/glebarez/go-sqlite v1.22.0
 	github.com/go-mqtt/mqtt v0.0.0-20210702165922-b33ea0451b0b
 	github.com/layeh/gopher-json v0.0.0-20201124131017-552bb3c4c3bf

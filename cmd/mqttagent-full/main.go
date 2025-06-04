@@ -19,10 +19,14 @@ package main
 import (
 	"database/sql"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"runtime/debug"
+	"strings"
 	"time"
 
+	"github.com/cjoudrey/gluahttp"
 	_ "github.com/glebarez/go-sqlite"
 	luajson "github.com/layeh/gopher-json"
 	"github.com/yuin/gopher-lua"
@@ -36,6 +40,8 @@ type fullMqttAgent struct {
 
 func (agent *fullMqttAgent) Setup(L *lua.LState) {
 	luajson.Preload(L)
+	L.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
+	L.SetGlobal("urlencode", L.NewFunction(luaUrlEncode))
 	setBuildInfo(L, "buildinfo")
 	setVersion(L, "version")
 	agent.loggers = make(map[string]*sqlogger)
@@ -83,6 +89,20 @@ func (agent *fullMqttAgent) ReloadEnd(oldL, newL *lua.LState) {
 		}
 	}
 	agent.oldLoggers = nil
+}
+
+func luaUrlEncode(L *lua.LState) int {
+	tbl := L.CheckTable(1)
+	result := make([]string, 0, tbl.Len())
+
+	L.ForEach(tbl, func(key, value lua.LValue) {
+		skey := url.QueryEscape(lua.LVAsString(key))
+		sval := url.QueryEscape(lua.LVAsString(value))
+		result = append(result, skey+"="+sval)
+	})
+
+	L.Push(lua.LString(strings.Join(result, "&")))
+	return 1
 }
 
 type sqlogger struct {
