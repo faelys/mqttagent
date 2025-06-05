@@ -139,7 +139,7 @@ c["test/#"] = function(self, message, topic)
 end
 ```
 
-### Client with LWT, keepalive and timer
+### Client with LWT, keepalive, timer, and internal events
 
 ```lua
 -- Keep alive in seconds
@@ -156,7 +156,7 @@ local c = mqttclient.new{
 	keep_alive = keepalive,
 }
 
--- Setup a ping timer for the keepalive
+-- Setup a ping timer (not needed anymore for the keepalive)
 if keepalive > 0 then
 	-- Create a new timer, dropping the variable (`self` is enough)
 	timer.new(os.time() + keepalive, function(self, t)
@@ -177,8 +177,20 @@ c["test"] = function(self, message, topic)
 	end
 end
 
--- Announce start
-c("Online", "test/status/mqttagent")
+-- Announce start on (re)connection
+c["$SYS/self/online"] = function(self)
+	self("Online", "test/status/mqttagent")
+end
+-- Pushover alert on deconnection
+c["$SYS/self/offline"] = function(self)
+	http.post("https://api.pushover.net/1/messages.json", {
+		body = urlencode({
+			token = "My Pushover Token String",
+			user = "My Pushover User String",
+			message = "Mqttagent Disconnected"
+		})
+	})
+end
 ```
 
 ### One-way MQTT Bridge
